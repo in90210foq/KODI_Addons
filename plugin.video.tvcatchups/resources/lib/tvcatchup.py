@@ -39,9 +39,11 @@ LANGUAGE      = REAL_SETTINGS.getLocalizedString
 TIMEOUT       = 15
 CONTENT_TYPE  = 'episodes'
 DEBUG         = REAL_SETTINGS.getSetting('Enable_Debugging') == 'true'
-BASE_URL      = 'http://www.tvcatchup.com'
+#BASE_URL      = 'http://www.tvcatchup.com'
+BASE_URL      = 'http://www.transponder.tv'
 ICON_URL      = 'http://images-cache.tvcatchup.com/NEW/images/channels/hover/channel_%d.png'
-LIVE_URL      = BASE_URL + '/channels'
+#LIVE_URL      = BASE_URL + '/channels'
+LIVE_URL      = BASE_URL + '/nownext'
 GUIDE_URL     = BASE_URL + '/tv-guide'
 LOGO          = os.path.join(SETTINGS_LOC,'%s.png')
 if xbmcvfs.exists(SETTINGS_LOC) == False: xbmcvfs.mkdirs(SETTINGS_LOC)
@@ -61,6 +63,8 @@ def trimString(string1):
     return re.sub('[\s+]', '', string1.strip(' \t\n\r'))
 
 def retrieveURL(url, dest):
+    #xbmc.log('infoq '+url+' '+dest,xbmc.LOGDEBUG)
+    urllib.URLopener.version='Mozilla'
     try: urllib.urlretrieve(url, dest)
     except Exception as e: log("retrieveURL, Failed! " + str(e), xbmc.LOGERROR)
     return True
@@ -100,7 +104,10 @@ class TVCatchup(object):
             log('openURL, url = ' + str(url))
             cacheresponse = self.cache.get(ADDON_NAME + '.openURL, url = %s'%url)
             if not cacheresponse:
-                cacheresponse = urllib2.urlopen(urllib2.Request(url), timeout=TIMEOUT).read()
+                #cacheresponse = urllib2.urlopen(urllib2.Request(url), timeout=TIMEOUT).read()
+                cookie='__cfduid=dfaab9e9df163fd587f241b3efa673f661535665549; XSRF-TOKEN=eyJpdiI6Ilwvb2xzTWZcL0syV0s2c2JGXC9walpCZnc9PSIsInZhbHVlIjoiQzdXdWRwd2VpV3didFdhRlFDakZURm5ZYUFzdFFFUjU4eGNoTlNYM09vdkhwSmdLNllaOHRJUVwvUWhWb2ZvZGwiLCJtYWMiOiIwNzk1M2UzOGI3NTI1ZjQzMjZiNmU3ZDhmZWQ5OGU4NGJkNWExOTNlZWJjNGNlMzcxOTFiOWQ1Mjk5ODU5NDJhIn0%3D; laravel_session=eyJpdiI6IldqZHN6cWNJSENnSGNkVjNhWXc3RWc9PSIsInZhbHVlIjoiUVRcL3B4MFNLSUgzNVwvV0JrSGVUWW52Y2VFVVFuV2w2U25ZVk5IRFRubmw2dGdlRXRQRHp5bHZ0djBMQ3lTQlVwIiwibWFjIjoiZTlkODMyYzgxOTFkMTRmMjcwYWI5ZDZkMmU4YTUyOWUxODgxMDEyYmQwNTIyNjBhOTg0YmFhOWIxMzg5NDY0ZiJ9; cookieconsent_status=dismiss'
+                headers={'User-Agent': 'Mozilla','Cookie':cookie}
+                cacheresponse = urllib2.urlopen(urllib2.Request(url,headers=headers), timeout=TIMEOUT).read()
                 self.cache.set(ADDON_NAME + '.openURL, url = %s'%url, cacheresponse, expiration=datetime.timedelta(minutes=5))
             return cacheresponse
         except Exception as e:
@@ -116,6 +123,7 @@ class TVCatchup(object):
     def downloadQueue(self, url, dest):
         if xbmcvfs.exists(LOGO%dest): return
         if self.downloadThread.isAlive(): self.downloadThread.join()
+        xbmc.log('infoq '+url+' '+xbmc.translatePath(LOGO%dest),xbmc.LOGDEBUG)
         self.downloadThread = threading.Timer(0.5, retrieveURL, [url, xbmc.translatePath(LOGO%dest)])
         xbmcgui.Dialog().notification(ADDON_NAME, LANGUAGE(30006), ICON, 200)
         self.downloadThread.name = "downloadThread"
@@ -130,12 +138,19 @@ class TVCatchup(object):
     def buildLive(self):
         items   = []
         soup    = BeautifulSoup(self.openURL(LIVE_URL), "html.parser")
-        results = soup('div' , {'class': 'channelsHolder'})
+        #results = soup('div' , {'class': 'channelsHolder'})
+        #results = soup('div' , {'class': 'channelBox'})
+        results = soup('div' , {'class': 'nowNextChannel'})
         for channel in results:
-            chlogo = channel.find_all('img')[0].attrs['src']
-            chname = cleanString(channel.find_all('img')[1].attrs['alt']).replace('Watch ','')
+            #chlogo = channel.find_all('img')[0].attrs['src']
+            chlogo = BASE_URL+channel.find_all('img')[0].attrs['src']
+            #chname = cleanString(channel.find_all('img')[1].attrs['alt']).replace('Watch ','')
+            #chname = cleanString(channel.find_all('img')[0].attrs['alt']).replace('Watch ','')
+            chname = cleanString(channel.find_all('a')[0].attrs['href']).replace('/watch/','')
             items.append((chlogo,chname))
-            label  = '%s - %s'%(chname,cleanString(channel.get_text()))
+            #label  = '%s - %s'%(chname,cleanString(channel.get_text()))
+            label  = '%s - %s'%(chname,cleanString(channel.get_text()).split('\n',1)[0])
+            #label  = '%s - %s'%(chname,chname)
             link   = channel.find_all('a')[0].attrs['href']
             thumb  = LOGO%chname
             infoLabels = {"mediatype":"episode","label":label ,"title":label}
